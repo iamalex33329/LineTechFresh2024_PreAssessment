@@ -6,10 +6,14 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.PopupMenu;
+import android.widget.Toast;
 
 import com.iamalex33329.linetechfresh2024_preassessment.adapters.MessageAdapter;
 import com.iamalex33329.linetechfresh2024_preassessment.models.GptMessage;
@@ -29,8 +33,10 @@ import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final String API_KEY = "XXX";
     private static final String TAG = "MainActivity";
-    private static final String API_KEY = "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";
+
+    private static boolean isAiActive = false;
 
     private final List<GptMessage> gptMessages = new ArrayList<>();
     private List<Message> messages = new ArrayList<>();
@@ -46,7 +52,47 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         initViews();
+        initGptMessages();
         initRecyclerView();
+    }
+
+    private void initGptMessages() { gptMessages.add(new GptMessage("system", "你的回覆內容只能有「繁體中文 zh-TW」「英文 en」")); }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_main, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        int itemId = item.getItemId();
+
+        if (itemId == R.id.action_check) {
+            View menuItemView = findViewById(R.id.action_check);
+            PopupMenu popup = new PopupMenu(this, menuItemView);
+            popup.getMenuInflater().inflate(R.menu.popup_menu, popup.getMenu());
+
+            popup.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+                public boolean onMenuItemClick(MenuItem item) {
+                    if (item.getItemId() == R.id.option1) {
+                        Toast.makeText(MainActivity.this, "已開啟 AI 對話", Toast.LENGTH_SHORT).show();
+                        isAiActive = true;
+                        return true;
+                    } else if (item.getItemId() == R.id.option2) {
+                        Toast.makeText(MainActivity.this, "已關閉 AI 對話", Toast.LENGTH_SHORT).show();
+                        isAiActive = false;
+                        return true;
+                    }
+                    return true;
+                }
+            });
+
+            popup.show();
+            return true;
+        }
+
+        return super.onOptionsItemSelected(item);
     }
 
     private void initViews() {
@@ -74,8 +120,9 @@ public class MainActivity extends AppCompatActivity {
         String content = userInputField.getText().toString().trim();
         if (!content.isEmpty()) {
             addMessage(new Message(true, content, new Date()));
-            sendMessageToOpenAI(content);
             userInputField.setText("");
+
+            if (isAiActive) sendMessageToOpenAI(content);
         }
     }
 

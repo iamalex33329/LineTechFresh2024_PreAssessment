@@ -1,4 +1,5 @@
 <resources>
-    <string name="app_name">LineTechFresh2024_AlexTsai</string>
+    <string name="app_name">Line Tech Fresh 2024</string>
     <string name="edittext_placeholder">Aa</string>
+    <string name="ai">AI</string>
 </resources>
