@@ -12,107 +12,109 @@ import android.widget.EditText;
 import android.widget.ImageView;
 
 import com.iamalex33329.linetechfresh2024_preassessment.adapters.MessageAdapter;
+import com.iamalex33329.linetechfresh2024_preassessment.models.GptMessage;
 import com.iamalex33329.linetechfresh2024_preassessment.models.Message;
+import com.iamalex33329.linetechfresh2024_preassessment.models.OpenAIResponse;
+import com.iamalex33329.linetechfresh2024_preassessment.network.ApiService;
+import com.iamalex33329.linetechfresh2024_preassessment.network.RetrofitClient;
 
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
 
-    private String[] TEST_MESSAGES;
+    private static final String TAG = "MainActivity";
+    private static final String API_KEY = "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";
 
-    private static final String TAG = MainActivity.class.getSimpleName();
-
-    private RecyclerView chatHistoryRecyclerView;
-    private ImageView simulateMessageButton;
-    private Button sendMessageButton;
-    private EditText userInputField;
-
-    private List<Message> messages;
+    private final List<GptMessage> gptMessages = new ArrayList<>();
+    private List<Message> messages = new ArrayList<>();
 
     private MessageAdapter messageAdapter;
+
+    private RecyclerView chatHistoryRecyclerView;
+    private EditText userInputField;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        initTestSentence();
+        initViews();
+        initRecyclerView();
+    }
 
+    private void initViews() {
         chatHistoryRecyclerView = findViewById(R.id.chatHistoryRecyclerView);
-        simulateMessageButton = findViewById(R.id.simulateMessageButton);
-        sendMessageButton = findViewById(R.id.sendMessageButton);
+        ImageView simulateMessageButton = findViewById(R.id.simulateMessageButton);
+        Button sendMessageButton = findViewById(R.id.sendMessageButton);
         userInputField = findViewById(R.id.userInputField);
 
-        messages = new ArrayList<>();
+        simulateMessageButton.setOnClickListener(this::simulateMessage);
+        sendMessageButton.setOnClickListener(this::sendMessage);
+    }
+
+    private void initRecyclerView() {
         messageAdapter = new MessageAdapter(this, messages);
         chatHistoryRecyclerView.setLayoutManager(new LinearLayoutManager(this));
         chatHistoryRecyclerView.setAdapter(messageAdapter);
+    }
 
-        simulateMessageButton.setOnClickListener(new View.OnClickListener() {
+    private void simulateMessage(View view) {
+        String message = TEST_MESSAGES[(int) (Math.random() * TEST_MESSAGES.length)];
+        addMessage(new Message(false, message, new Date()));
+    }
+
+    private void sendMessage(View view) {
+        String content = userInputField.getText().toString().trim();
+        if (!content.isEmpty()) {
+            addMessage(new Message(true, content, new Date()));
+            sendMessageToOpenAI(content);
+            userInputField.setText("");
+        }
+    }
+
+    private void addMessage(Message message) {
+        messages.add(message);
+        messageAdapter.notifyItemInserted(messages.size() - 1);
+        chatHistoryRecyclerView.scrollToPosition(messages.size() - 1);
+    }
+
+    private void sendMessageToOpenAI(String userInput) {
+        gptMessages.add(new GptMessage("user", userInput));
+
+        ApiService apiService = RetrofitClient.getApiService();
+        String authHeader = "Bearer " + API_KEY;
+
+        HashMap<String, Object> body = new HashMap<>();
+        body.put("model", "gpt-3.5-turbo");
+        body.put("messages", gptMessages);
+        body.put("temperature", 0.8);
+
+        apiService.sendMessage(authHeader, body).enqueue(new Callback<OpenAIResponse>() {
             @Override
-            public void onClick(View view) {
-                int i = (int) (Math.random() * TEST_MESSAGES.length);
-
-                messages.add(new Message(false, TEST_MESSAGES[i], new Date()));
-                messageAdapter.notifyItemInserted(messages.size() - 1);
-                chatHistoryRecyclerView.scrollToPosition(messages.size() - 1);
-            }
-        });
-
-        sendMessageButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                String content = userInputField.getText().toString().trim();
-
-                if (!content.isEmpty()) {
-                    messages.add(new Message(true, content, new Date()));
-                    messageAdapter.notifyItemInserted(messages.size() - 1);
-                    chatHistoryRecyclerView.scrollToPosition(messages.size() - 1);
+            public void onResponse(Call<OpenAIResponse> call, Response<OpenAIResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    for (OpenAIResponse.Choice choice : response.body().choices) {
+                        addMessage(new Message(false, choice.message.content, new Date()));
+                        gptMessages.add(new GptMessage("assistant", choice.message.content));   // 紀錄對話內容
+                    }
                 }
-
-                userInputField.setText("");
+            }
+            @Override
+            public void onFailure(Call<OpenAIResponse> call, Throwable t) {
+                Log.e(TAG, "API 請求失敗：", t);
             }
         });
     }
 
-    private void initTestSentence() {
-        TEST_MESSAGES = new String[]{
-                "Hey there! Just dropping by to say hello!",
-                "How's your day treating you so far?",
-                "I hope today brings you all the joy you deserve!",
-                "Any exciting plans on the agenda for today?",
-                "Sending you a virtual hug and some positivity!",
-                "Have you tried any new activities recently?",
-                "Let's strive to make today even better than yesterday!",
-                "What's one thing that brought a smile to your face today?",
-                "Keep your head up high, the sky's the limit!",
-                "Remember to take some time for self-care and relaxation!",
-                "I'm eager to hear all about your day!",
-                "Every small step forward is progress worth celebrating!",
-                "What's one thing you're thankful for in this moment?",
-                "Stay focused on your goals, you're doing great!",
-                "May your day be filled with laughter and good vibes!",
-                "Enjoy the journey and cherish every moment along the way!",
-                "You're more resilient than you realize!",
-                "Trust in your abilities, you're capable of achieving anything!",
-                "Let's make the most out of today and create memories!",
-                "Wishing you a day brimming with happiness and positivity!",
-                "Life is an adventure waiting to unfold!",
-                "Never underestimate the power of taking a break and recharging!",
-                "Every obstacle you overcome makes you stronger!",
-                "Believe in yourself, you're capable of overcoming any challenge!",
-                "Carpe diem! Seize the day and make it extraordinary!",
-                "Sending you a cascade of good vibes and warm wishes!",
-                "The world is full of opportunities, go out and seize them!",
-                "Let's embrace the day with open arms and a positive mindset!",
-                "You're a beacon of strength and resilience!",
-                "Even on tough days, remember that brighter days are ahead!",
-                "Trust in the journey and enjoy the process!",
-                "Your positive energy can light up the darkest of days!",
-                "Remember to give yourself credit for how far you've come!",
-                "Every setback is just a setup for a comeback!"
-        };
-    }
+    private static final String[] TEST_MESSAGES = {
+            "。", "是喔", "我先去洗澡", "哈哈哈哈哈哈哈哈哈哈哈哈哈哈",
+            "達文西密碼的上面是什麼？\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n達文西帳號"
+    };
 }
