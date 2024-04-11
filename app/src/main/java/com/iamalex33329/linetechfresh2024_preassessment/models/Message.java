@@ -1,14 +1,16 @@
 package com.iamalex33329.linetechfresh2024_preassessment.models;
 
-import androidx.annotation.NonNull;
-
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Message {
 
     private boolean sentByCurrentUser;
     private String content;
     private Date timestamp;
+
+    public Message() {}
 
     public Message(boolean sentByCurrentUser, String content, Date timestamp) {
         this.sentByCurrentUser = sentByCurrentUser;
@@ -36,13 +38,16 @@ public class Message {
         return timestamp;
     }
 
-    public void setTimestamp(Date timestamp) {
-        this.timestamp = timestamp;
+    public void setTimestamp(Object timestamp) {
+        if (timestamp instanceof Long) this.timestamp = new Date((Long) timestamp);
+        else this.timestamp = (Date) timestamp;
     }
 
-    @NonNull
-    @Override
-    public String toString() {
-        return "Message { sentByCurrentUser=" + sentByCurrentUser + ", content='" + content + '\'' + ", timestamp=" + timestamp + " }";
+    public Map<String, Object> toMap() {
+        HashMap<String, Object> result = new HashMap<>();
+        result.put("sentByCurrentUser", sentByCurrentUser);
+        result.put("content", content);
+        result.put("timestamp", timestamp.getTime());
+        return result;
     }
 }

@@ -4,6 +4,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.annotation.SuppressLint;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
@@ -15,33 +16,31 @@ import android.widget.ImageView;
 import android.widget.PopupMenu;
 import android.widget.Toast;
 
+import com.google.firebase.database.DatabaseError;
+
 import com.iamalex33329.linetechfresh2024_preassessment.adapters.MessageAdapter;
 import com.iamalex33329.linetechfresh2024_preassessment.models.GptMessage;
 import com.iamalex33329.linetechfresh2024_preassessment.models.Message;
 import com.iamalex33329.linetechfresh2024_preassessment.models.OpenAIResponse;
-import com.iamalex33329.linetechfresh2024_preassessment.network.ApiService;
-import com.iamalex33329.linetechfresh2024_preassessment.network.RetrofitClient;
+import com.iamalex33329.linetechfresh2024_preassessment.services.FirebaseChatService;
+import com.iamalex33329.linetechfresh2024_preassessment.services.OpenAIService;
 
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String API_KEY = "XXX";
     private static final String TAG = "MainActivity";
-
     private static boolean isAiActive = false;
 
     private final List<GptMessage> gptMessages = new ArrayList<>();
     private List<Message> messages = new ArrayList<>();
 
     private MessageAdapter messageAdapter;
+    private FirebaseChatService firebaseChatService;
+    private OpenAIService openAIService;
 
     private RecyclerView chatHistoryRecyclerView;
     private EditText userInputField;
@@ -51,12 +50,13 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        initViews();
-        initGptMessages();
-        initRecyclerView();
-    }
+        firebaseChatService = new FirebaseChatService(this);
+        openAIService = new OpenAIService();
 
-    private void initGptMessages() { gptMessages.add(new GptMessage("system", "你的回覆內容只能有「繁體中文 zh-TW」「英文 en」")); }
+        initViews();
+        initRecyclerView();
+        loadMessagesFromFirebase();
+    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -87,7 +87,6 @@ public class MainActivity extends AppCompatActivity {
                     return true;
                 }
             });
-
             popup.show();
             return true;
         }
@@ -119,10 +118,27 @@ public class MainActivity extends AppCompatActivity {
     private void sendMessage(View view) {
         String content = userInputField.getText().toString().trim();
         if (!content.isEmpty()) {
-            addMessage(new Message(true, content, new Date()));
+            Message newMessage = new Message(true, content, new Date());
+            addMessage(newMessage);
             userInputField.setText("");
 
-            if (isAiActive) sendMessageToOpenAI(content);
+            if (isAiActive) {
+                gptMessages.add(new GptMessage("user", content));
+                openAIService.sendMessageToOpenAI(gptMessages, new OpenAIService.ResponseHandler() {
+                    @Override
+                    public void onSuccess(OpenAIResponse response) {
+                        for (OpenAIResponse.Choice choice : response.choices) {
+                            runOnUiThread(() -> addMessage(new Message(false, choice.message.content, new Date())));
+                            gptMessages.add(new GptMessage("assistant", choice.message.content));
+                        }
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+                        Log.e(TAG, "API access failure: ", t);
+                    }
+                });
+            }
         }
     }
 
@@ -130,32 +146,23 @@ public class MainActivity extends AppCompatActivity {
         messages.add(message);
         messageAdapter.notifyItemInserted(messages.size() - 1);
         chatHistoryRecyclerView.scrollToPosition(messages.size() - 1);
+        firebaseChatService.saveMessageToFirebase(message);
     }
 
-    private void sendMessageToOpenAI(String userInput) {
-        gptMessages.add(new GptMessage("user", userInput));
-
-        ApiService apiService = RetrofitClient.getApiService();
-        String authHeader = "Bearer " + API_KEY;
-
-        HashMap<String, Object> body = new HashMap<>();
-        body.put("model", "gpt-3.5-turbo");
-        body.put("messages", gptMessages);
-        body.put("temperature", 0.8);
-
-        apiService.sendMessage(authHeader, body).enqueue(new Callback<OpenAIResponse>() {
+    private void loadMessagesFromFirebase() {
+        firebaseChatService.loadMessagesFromFirebase(new FirebaseChatService.MessageLoadListener() {
+            @SuppressLint("NotifyDataSetChanged")
             @Override
-            public void onResponse(Call<OpenAIResponse> call, Response<OpenAIResponse> response) {
-                if (response.isSuccessful() && response.body() != null) {
-                    for (OpenAIResponse.Choice choice : response.body().choices) {
-                        addMessage(new Message(false, choice.message.content, new Date()));
-                        gptMessages.add(new GptMessage("assistant", choice.message.content));   // 紀錄對話內容
-                    }
-                }
+            public void onMessagesLoaded(List<Message> loadedMessages) {
+                messages.clear();
+                messages.addAll(loadedMessages);
+                messageAdapter.notifyDataSetChanged();
+                chatHistoryRecyclerView.scrollToPosition(messages.size() - 1);
             }
+
             @Override
-            public void onFailure(Call<OpenAIResponse> call, Throwable t) {
-                Log.e(TAG, "API 請求失敗：", t);
+            public void onError(DatabaseError databaseError) {
+                Log.e(TAG, "Failed to load chat history: ", databaseError.toException());
             }
         });
     }
